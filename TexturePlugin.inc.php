@@ -136,6 +136,98 @@ class TexturePlugin extends GenericPlugin {
 	}
 
 	/**
+	 * Hook callback: apply special processing to DAR uploads
+	 * @see submissionfilesuploadform::execute()
+	 */
+	function processUpload($hookName, $args) {
+		$submissionFile = $args[1];
+		if ($submissionFile && $submissionFile->getExtension() == 'dar') {
+			if (PKPString::mime_content_type($submissionFile->getFilePath()) === 'application/zip') {
+				// process the DAR into an XML manuscript and dependent files
+				import('lib.pkp.classes.file.TemporaryFileManager');
+				$temporaryFileManager = new TemporaryFileManager();
+				$temporaryFileManager->mkdirtree($temporaryFileManager->getBasePath());
+				$tempdir = tempnam($temporaryFileManager->getBasePath(), 'dar');
+				unlink($tempdir);
+				if ($temporaryFileManager->mkdir($tempdir)) {
+					$tempfile = tempnam($tempdir, 'jats').'.zip';
+					$temporaryFileManager->copyFile($submissionFile->getFilePath(), $tempfile);
+					$errorMsg = '';
+					if ($temporaryFileManager->extractFiles($tempfile, $tempdir, $errorMsg)) {
+						if (file_exists($tempdir.PATH_SEPARATOR.'manifest.xml')) {
+							$submissionFile = $this->overwriteSubmissionWithDar($submissionFile, $tempdir.PATH_SEPARATOR.'manifest.xml');
+						} else {
+							// log is not a Texture DAR
+						}
+					} else {
+						// log $errorMsg;
+					}
+					$temporaryFileManager->rmtree($tempdir);
+				}
+			}
+		}
+		// returning false allows processing to continue
+		return false;
+	}
+
+	/**
+	 * Process an extracted DAR into a submission file
+	 * @param SubmissionFile $submissionFile
+	 * @param $manifestFilePath string path to manifest file
+	 * @return mixed SubmissionFile or null
+	 */
+	function overwriteSubmissionWithDar($submissionFile, $manifestFilePath) {
+			if (!file_exists($manifestFilePath)) {
+				return false;
+			}
+			$dar = simplexml_load_file($manifestFilePath);
+			$manuscriptFilePath = '';
+			foreach ($dar->documents->children() as $doc) {
+				if ($doc['id'] === 'manuscript') {
+					$manuscriptFilePath = dirname($manifestFilePath).DIRECTORY_SEPARATOR.$doc['path'];
+				} else {
+					// what other documents might be here?
+				}
+			}
+			if (!$manifestFilePath) {
+				return false;
+			}
+			$submissionDao = Application::getSubmissionDAO();
+			$submission = $submissionDao->getById($submissionFile->submissionId);
+			import('lib.pkp.classes.file.SubmissionFileManager');
+			$submissionFileManager = new SubmissionFileManager(
+				$submission->getContextId(),
+				$submissionFile->getSubmissionId()
+			);
+			$newSubmissionFile = $submissionFileManager->copySubmissionFile(
+					$manuscriptFilePath,
+					$submissionFile->getFileStage(),
+					$submissionFile->getUploaderUserId(),
+					$submissionFile->getRevision(),
+					$submissionFile->getGenreId(),
+					$submissionFile->getAssocType(),
+					$submissionFile->getAssocId()
+			);
+			if ($dar->assets) {
+				foreach ($dar->assets->children() as $asset) {
+					$mediaData = file_get_contents(dirname($manifestFilePath).DIRECTORY_SEPARATOR.$asset['path']);
+					$genreId = $this->suggestDependentGenreId($asset['type']);
+					if ($genreId) {
+						$dependentFile = $this->createDependentFile($genreId, $mediaData, $submission, $submissionFile, $submissionFile->getUploaderUserId());
+					} else {
+						// log unknown genre
+					}
+				}
+			}
+
+			if ($newSubmissionFile) {
+				$submissionFileManager->deleteById($submissionFile->getId());
+				return $newSubmissionFile;
+			}
+			return false;
+	}
+
+	/**
 	 * creates dependent file
 	 * @param $genreId int Genre of the new dependent file
 	 * @param $mediaData string Dependent media file contents
