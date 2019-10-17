@@ -41,6 +41,7 @@ class TexturePlugin extends GenericPlugin {
 				// Register callbacks.
 				HookRegistry::register('LoadHandler', array($this, 'callbackLoadHandler'));
 				HookRegistry::register('TemplateManager::fetch', array($this, 'templateFetchCallback'));
+				HookRegistry::register('submissionfilesuploadform::execute', array($this, 'processUpload'));
 
 				$this->_registerTemplateResource();
 			}
@@ -132,5 +133,111 @@ class TexturePlugin extends GenericPlugin {
 				}
 			}
 		}
+	}
+
+	/**
+	 * creates dependent file
+	 * @param $genreId int Genre of the new dependent file
+	 * @param $mediaData string Dependent media file contents
+	 * @param $submission Submission Submission to which to attach the dependent file
+	 * @param $submissionFile SubmissionFile Submission file to which to attach the dependent file
+	 * @param $user User Submitting user
+	 * @return SubmissionArtworkFile
+	 */
+	public function createDependentFile($genreId, $mediaData, $submission, $submissionFile, $user) {
+		$tmpfname = tempnam(sys_get_temp_dir(), 'texture');
+		file_put_contents($tmpfname, $mediaData);
+
+		$submissionFileDao = DAORegistry::getDAO('SubmissionFileDAO');
+		$newMediaFile = $submissionFileDao->newDataObjectByGenreId($genreId);
+		$newMediaFile->setSubmissionId($submission->getId());
+		$newMediaFile->setSubmissionLocale($submission->getLocale());
+		$newMediaFile->setGenreId($genreId);
+		$newMediaFile->setFileStage(SUBMISSION_FILE_DEPENDENT);
+		$newMediaFile->setDateUploaded(Core::getCurrentDate());
+		$newMediaFile->setDateModified(Core::getCurrentDate());
+		$newMediaFile->setUploaderUserId($user->getId());
+		$newMediaFile->setFileSize(filesize($tmpfname));
+		$newMediaFile->setFileType($mediaData["fileType"]);
+		$newMediaFile->setAssocId($submissionFile->getFileId());
+		$newMediaFile->setAssocType(ASSOC_TYPE_SUBMISSION_FILE);
+		$newMediaFile->setOriginalFileName($mediaData["fileName"]);
+		$insertedMediaFile = $submissionFileDao->insertObject($newMediaFile, $tmpfname);
+
+		unlink($tmpfname);
+
+		return $insertedMediaFile;
+	}
+
+	/**
+	 * Update manuscript XML file
+	 * @param $fileStage int File stage of the new submission file
+	 * @param $genreId int Genre of the new submission file
+	 * @param $manuscriptXml string Manuscript XML content
+	 * @param $submission Submission Submission to which to attach the new SubmissionFile
+	 * @param $submissionFile SubmissionFile Original submission file to update
+	 * @param $user User Submitting user
+	 * @return SubmissionFile
+	 */
+	public function updateManuscriptFile($fileStage, $genreId, $manuscriptXml, $submission, $submissionFile, $user) {
+		$tmpfname = tempnam(sys_get_temp_dir(), 'texture');
+		file_put_contents($tmpfname, $manuscriptXml);
+
+
+		$fileSize = filesize($tmpfname);
+
+		$submissionFileDao = DAORegistry::getDAO('SubmissionFileDAO');
+		$newSubmissionFile = $submissionFileDao->newDataObjectByGenreId($genreId);
+
+		$newSubmissionFile->setSubmissionId($submission->getId());
+		$newSubmissionFile->setSubmissionLocale($submission->getLocale());
+		$newSubmissionFile->setGenreId($genreId);
+		$newSubmissionFile->setFileStage($fileStage);
+		$newSubmissionFile->setDateUploaded(Core::getCurrentDate());
+		$newSubmissionFile->setDateModified(Core::getCurrentDate());
+		$newSubmissionFile->setOriginalFileName($submissionFile->getOriginalFileName());
+		$newSubmissionFile->setUploaderUserId($user->getId());
+		$newSubmissionFile->setFileSize($fileSize);
+		$newSubmissionFile->setFileType($submissionFile->getFileType());
+		$newSubmissionFile->setSourceFileId($submissionFile->getFileId());
+		$newSubmissionFile->setSourceRevision($submissionFile->getRevision());
+		$newSubmissionFile->setFileId($submissionFile->getFileId());
+		$newSubmissionFile->setRevision($submissionFile->getRevision() + 1);
+		$insertedSubmissionFile = $submissionFileDao->insertObject($newSubmissionFile, $tmpfname);
+
+		unlink($tmpfname);
+
+		return $insertedSubmissionFile;
+	}
+
+	/**
+	 * Suggest a dependent Genre by file type
+	 * @param $filetype string mime file type
+	 * @return null|int Genre Id if available
+	 */
+	function suggestDependentGenreId($filetype) {
+		$request = $this->getRequest();
+		$journal = $request->getJournal();
+		$genreDao = DAORegistry::getDAO('GenreDAO');
+		$genres = $genreDao->getByDependenceAndContextId(true, $journal->getId());
+		$genreId = null;
+		import('classes.file.PublicFileManager');
+		$publicFileManager = new PublicFileManager();
+		$extension = $publicFileManager->getImageExtension($filetype);
+		while ($candidateGenre = $genres->next()) {
+			if ($extension) {
+				if ($candidateGenre->getKey() == 'IMAGE') {
+					$genreId = $candidateGenre->getId();
+					break;
+				}
+			} else {
+				if ($candidateGenre->getKey() == 'MULTIMEDIA') {
+					$genreId = $candidateGenre->getId();
+					break;
+
+				}
+			}
+		}
+		return $genreId;
 	}
 }

@@ -174,29 +174,7 @@ class TextureHandler extends Handler {
 				$media = (array)json_decode($postData)->media;
 
 				if (!empty($media)) {
-					import('classes.file.PublicFileManager');
-					$publicFileManager = new PublicFileManager();
-
-
-					$journal = $request->getJournal();
-					$genreDao = DAORegistry::getDAO('GenreDAO');
-					$genres = $genreDao->getByDependenceAndContextId(true, $journal->getId());
-					$genreId = null;
-					$extension = $publicFileManager->getImageExtension($media["fileType"]);
-					while ($candidateGenre = $genres->next()) {
-						if ($extension) {
-							if ($candidateGenre->getKey() == 'IMAGE') {
-								$genreId = $candidateGenre->getId();
-								break;
-							}
-						} else {
-							if ($candidateGenre->getKey() == 'MULTIMEDIA') {
-								$genreId = $candidateGenre->getId();
-								break;
-
-							}
-						}
-					}
+					$genreId = $this->_plugin->suggestDependentGenre($media["fileType"]);
 					if (!$genreId) {
 						// Could not identify the genre -- it's an error condition
 						return new JSONMessage(false);
@@ -387,44 +365,23 @@ class TextureHandler extends Handler {
 
 	/**
 	 * creates dependent file
-	 * @param $genreId intr
-	 * @param $mediaData string
+	 * @param $genreId int
+	 * @param $mediaData string Base64 encoded media file with JSON prefix
 	 * @param $submission Article
-	 * @param $submissionFile SubmissionFie
+	 * @param $submissionFile SubmissionFile
 	 * @param $user User
 	 * @return SubmissionArtworkFile
 	 */
 	protected function _createDependentFile($genreId, $mediaData, $submission, $submissionFile, $user) {
 		$mediaBlob = base64_decode(preg_replace('#^data:\w+/\w+;base64,#i', '', $mediaData["data"]));
-		$tmpfname = tempnam(sys_get_temp_dir(), 'texture');
-		file_put_contents($tmpfname, $mediaBlob);
-
-		$submissionFileDao = DAORegistry::getDAO('SubmissionFileDAO');
-		$newMediaFile = $submissionFileDao->newDataObjectByGenreId($genreId);
-		$newMediaFile->setSubmissionId($submission->getId());
-		$newMediaFile->setSubmissionLocale($submission->getLocale());
-		$newMediaFile->setGenreId($genreId);
-		$newMediaFile->setFileStage(SUBMISSION_FILE_DEPENDENT);
-		$newMediaFile->setDateUploaded(Core::getCurrentDate());
-		$newMediaFile->setDateModified(Core::getCurrentDate());
-		$newMediaFile->setUploaderUserId($user->getId());
-		$newMediaFile->setFileSize(filesize($tmpfname));
-		$newMediaFile->setFileType($mediaData["fileType"]);
-		$newMediaFile->setAssocId($submissionFile->getFileId());
-		$newMediaFile->setAssocType(ASSOC_TYPE_SUBMISSION_FILE);
-		$newMediaFile->setOriginalFileName($mediaData["fileName"]);
-		$insertedMediaFile = $submissionFileDao->insertObject($newMediaFile, $tmpfname);
-
-		unlink($tmpfname);
-
-		return $insertedMediaFile;
+		return $this->_plugin->createDependentFile($genreId, $mediaBlob, $submission, $submissionFile, $user);
 	}
 
 	/**
 	 * Update manuscript XML file
 	 * @param $fileStage int
 	 * @param $genreId int
-	 * @param $resources  array
+	 * @param $resources array With index "manuscript.xml" pointing to XML content
 	 * @param $submission Article
 	 * @param $submissionFile SubmissionFile
 	 * @param $user User
@@ -432,34 +389,7 @@ class TextureHandler extends Handler {
 	 */
 	protected function _updateManuscriptFile($fileStage, $genreId, $resources, $submission, $submissionFile, $user) {
 		$manuscriptXml = $resources['manuscript.xml']->data;
-		$tmpfname = tempnam(sys_get_temp_dir(), 'texture');
-		file_put_contents($tmpfname, $manuscriptXml);
-
-
-		$fileSize = filesize($tmpfname);
-
-		$submissionFileDao = DAORegistry::getDAO('SubmissionFileDAO');
-		$newSubmissionFile = $submissionFileDao->newDataObjectByGenreId($genreId);
-
-		$newSubmissionFile->setSubmissionId($submission->getId());
-		$newSubmissionFile->setSubmissionLocale($submission->getLocale());
-		$newSubmissionFile->setGenreId($genreId);
-		$newSubmissionFile->setFileStage($fileStage);
-		$newSubmissionFile->setDateUploaded(Core::getCurrentDate());
-		$newSubmissionFile->setDateModified(Core::getCurrentDate());
-		$newSubmissionFile->setOriginalFileName($submissionFile->getOriginalFileName());
-		$newSubmissionFile->setUploaderUserId($user->getId());
-		$newSubmissionFile->setFileSize($fileSize);
-		$newSubmissionFile->setFileType($submissionFile->getFileType());
-		$newSubmissionFile->setSourceFileId($submissionFile->getFileId());
-		$newSubmissionFile->setSourceRevision($submissionFile->getRevision());
-		$newSubmissionFile->setFileId($submissionFile->getFileId());
-		$newSubmissionFile->setRevision($submissionFile->getRevision() + 1);
-		$insertedSubmissionFile = $submissionFileDao->insertObject($newSubmissionFile, $tmpfname);
-
-		unlink($tmpfname);
-
-		return $insertedSubmissionFile;
+		return $this->_plugin->updateManuscriptFile($fileStage, $genreId, $manuscriptXml, $submission, $submissionFile, $user);
 	}
 
 	/**
