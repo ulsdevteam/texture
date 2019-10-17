@@ -374,7 +374,7 @@ class TextureHandler extends Handler {
 	 */
 	protected function _createDependentFile($genreId, $mediaData, $submission, $submissionFile, $user) {
 		$mediaBlob = base64_decode(preg_replace('#^data:\w+/\w+;base64,#i', '', $mediaData["data"]));
-		return $this->_plugin->createDependentFile($genreId, $mediaBlob, $submission, $submissionFile, $user);
+		return $this->_plugin->createDependentFile($genreId, $mediaBlob, $submission, $submissionFile, $user->getId());
 	}
 
 	/**
@@ -389,7 +389,7 @@ class TextureHandler extends Handler {
 	 */
 	protected function _updateManuscriptFile($fileStage, $genreId, $resources, $submission, $submissionFile, $user) {
 		$manuscriptXml = $resources['manuscript.xml']->data;
-		return $this->_plugin->updateManuscriptFile($fileStage, $genreId, $manuscriptXml, $submission, $submissionFile, $user);
+		return $this->_plugin->updateManuscriptFile($fileStage, $genreId, $manuscriptXml, $submission, $submissionFile, $user->getId());
 	}
 
 	/**

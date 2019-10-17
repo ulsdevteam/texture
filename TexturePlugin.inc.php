@@ -141,10 +141,10 @@ class TexturePlugin extends GenericPlugin {
 	 * @param $mediaData string Dependent media file contents
 	 * @param $submission Submission Submission to which to attach the dependent file
 	 * @param $submissionFile SubmissionFile Submission file to which to attach the dependent file
-	 * @param $user User Submitting user
+	 * @param $userid int Submitting user
 	 * @return SubmissionArtworkFile
 	 */
-	public function createDependentFile($genreId, $mediaData, $submission, $submissionFile, $user) {
+	public function createDependentFile($genreId, $mediaData, $submission, $submissionFile, $userid) {
 		$tmpfname = tempnam(sys_get_temp_dir(), 'texture');
 		file_put_contents($tmpfname, $mediaData);
 
@@ -156,7 +156,7 @@ class TexturePlugin extends GenericPlugin {
 		$newMediaFile->setFileStage(SUBMISSION_FILE_DEPENDENT);
 		$newMediaFile->setDateUploaded(Core::getCurrentDate());
 		$newMediaFile->setDateModified(Core::getCurrentDate());
-		$newMediaFile->setUploaderUserId($user->getId());
+		$newMediaFile->setUploaderUserId($userid);
 		$newMediaFile->setFileSize(filesize($tmpfname));
 		$newMediaFile->setFileType($mediaData["fileType"]);
 		$newMediaFile->setAssocId($submissionFile->getFileId());
@@ -176,10 +176,10 @@ class TexturePlugin extends GenericPlugin {
 	 * @param $manuscriptXml string Manuscript XML content
 	 * @param $submission Submission Submission to which to attach the new SubmissionFile
 	 * @param $submissionFile SubmissionFile Original submission file to update
-	 * @param $user User Submitting user
+	 * @param $userid User Submitting user
 	 * @return SubmissionFile
 	 */
-	public function updateManuscriptFile($fileStage, $genreId, $manuscriptXml, $submission, $submissionFile, $user) {
+	public function updateManuscriptFile($fileStage, $genreId, $manuscriptXml, $submission, $submissionFile, $userid) {
 		$tmpfname = tempnam(sys_get_temp_dir(), 'texture');
 		file_put_contents($tmpfname, $manuscriptXml);
 
@@ -196,7 +196,7 @@ class TexturePlugin extends GenericPlugin {
 		$newSubmissionFile->setDateUploaded(Core::getCurrentDate());
 		$newSubmissionFile->setDateModified(Core::getCurrentDate());
 		$newSubmissionFile->setOriginalFileName($submissionFile->getOriginalFileName());
-		$newSubmissionFile->setUploaderUserId($user->getId());
+		$newSubmissionFile->setUploaderUserId($userid);
 		$newSubmissionFile->setFileSize($fileSize);
 		$newSubmissionFile->setFileType($submissionFile->getFileType());
 		$newSubmissionFile->setSourceFileId($submissionFile->getFileId());
